@@ -376,7 +376,7 @@ main :: proc () {
 			raylib.ClearBackground(raylib.BLACK)
 
 			setupBackground(gameEnv, tile, tileCount, cloud, []physics.Vector{}, rock)
-			components.healthbar(&health, raylib.Rectangle{40, 10, 200, 25})
+			components.healthbar(&samurai.health, raylib.Rectangle{40, 10, 200, 25})
 			
 			coinTexture := getCurrentTexture(coinFrames, coinAnimate)
 			for &coin in coins {
@@ -401,9 +401,15 @@ main :: proc () {
 }
 
 goblinBrain :: proc(goblin: ^GameObject, samurai: ^GameObject, gameEnv: ^GameEnvironment, deltaTime: f32) {
+
  if !goblin.visible {
 	  return 
  }
+
+ if goblin.health < 0 {
+	  animation.setState(goblin.animate, animation.CHARACTER_STATE.DEATH)
+ }
+
 
  #partial switch goblin.animate.state {
  case .RUN:
@@ -416,20 +422,34 @@ goblinBrain :: proc(goblin: ^GameObject, samurai: ^GameObject, gameEnv: ^GameEnv
 	 }
 
 	 if raylib.CheckCollisionRecs(goblin.rect, samurai.rect) {
-		  animation.setState(goblin.animate, animation.CHARACTER_STATE.ATTACK) 
+		 if samurai.animate.state == animation.CHARACTER_STATE.ATTACK {
+				animation.setState(goblin.animate, animation.CHARACTER_STATE.HIT) 
+		 } else {
+			   animation.setState(goblin.animate, animation.CHARACTER_STATE.ATTACK) 
+		 }
 	 }
 
 	 physics.run(goblin.physics, gameEnv.physics, deltaTime, cast(i32)goblin.direction)  
 	 updatePosition(goblin, goblin.physics.position)
 
  case .ATTACK:
-	 if raylib.CheckCollisionRecs(goblin.rect, samurai.rect) {
-		 fmt.println("Hit")  
+	 if raylib.CheckCollisionRecs(goblin.rect, samurai.rect) && samurai.health > 0 {
+		 samurai.health -= 10
 	 }
 
 	 if !raylib.CheckCollisionRecs(goblin.rect, samurai.rect) {
 		  animation.setState(goblin.animate, animation.CHARACTER_STATE.RUN) 
+	 } else if samurai.animate.state == animation.CHARACTER_STATE.ATTACK {
+			animation.setState(goblin.animate, animation.CHARACTER_STATE.HIT) 
 	 }
+
+ case .HIT:
+	 if !raylib.CheckCollisionRecs(goblin.rect, samurai.rect) {
+		  animation.setState(goblin.animate, animation.CHARACTER_STATE.RUN) 
+			return
+	 }
+
+	 goblin.health -= 2
  }
 }
 
