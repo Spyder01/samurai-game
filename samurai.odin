@@ -8,6 +8,7 @@ import "vendor:raylib"
 import "./pkg/animation"
 import "./pkg/physics"
 import "./pkg/components"
+import "./pkg/vectors"
 
 SCREEN_WIDTH :: 1200
 SCREEN_HEIGHT :: 600
@@ -238,6 +239,11 @@ main :: proc () {
 			},
 			1.5,
 		}
+	defer {
+		for key in goblinFrames {
+			unloadTexture(goblinFrames[key])
+		}
+	}
 		
 		goblin := spawnNewGameObject(goblinPhysics, goblinAnimate, getCurrentTexture(goblinFrames, goblinAnimate))
 		goblin.direction = -1
@@ -312,58 +318,19 @@ main :: proc () {
 		raylib.SetTargetFPS(gameEnv.physics.FPS)
 
 		for !raylib.WindowShouldClose() {
+			if samurai.health <= 0 {
+				samurai.visible = false  
+			}
+
 			deltaTime := raylib.GetFrameTime()
 
 			animation.animateCharacter(samuraiFrames, samurai.animate, deltaTime)
 			animation.animateCharacter(coinFrames, coins[0].animate, deltaTime)
 			animation.animateCharacter(goblinFrames, goblin.animate, deltaTime)
-
-			goblinBrain(&goblin, &samurai, gameEnv, deltaTime)
-
-			physics.freeFall(samurai.physics, gameEnv.physics, deltaTime)
-			updatePosition(&samurai, samurai.physics.position)
-
-			if raylib.IsKeyPressed(raylib.KeyboardKey.UP) && samurai.physics.position.y == env.groundHeight  {
-				physics.jump(samurai.physics, gameEnv.physics, deltaTime)	  
-				updatePosition(&samurai, samurai.physics.position)
-			}
-
-			if raylib.IsKeyPressed(raylib.KeyboardKey.LEFT) {
-				samurai.direction = -1
-			} 
-
-			if raylib.IsKeyPressed(raylib.KeyboardKey.RIGHT) {
-				samurai.direction = 1  
-			}
-
-			if raylib.IsKeyDown(raylib.KeyboardKey.SPACE) {
-				animation.setState(samurai.animate, animation.CHARACTER_STATE.ATTACK)
-				updatePosition(&samurai, samurai.physics.position)
-			} else if raylib.IsKeyDown(raylib.KeyboardKey.RIGHT) || raylib.IsKeyDown(raylib.KeyboardKey.LEFT) {
-				animation.setState(samurai.animate, animation.CHARACTER_STATE.RUN)  
-				physics.run(samurai.physics, gameEnv.physics, deltaTime, cast(i32)samurai.direction)
-				updatePosition(&samurai, samurai.physics.position)
-			} 
-			else {
-				animation.setState(samurai.animate, animation.CHARACTER_STATE.IDLE)
-				physics.stopRunning(samurai.physics)
-				updatePosition(&samurai, samurai.physics.position)
-			}
-
-			if cast(f32)samurai.physics.position.x > gameEnv.rect.width {
-				updatePosition(&samurai, &physics.Vector{
-					SCREEN_WIDTH,
-					samurai.physics.position.y,
-				})
-			}
-
-			if samurai.physics.position.x < cast(i32)gameEnv.rect.x {
-				updatePosition(&samurai, &physics.Vector{
-					cast(i32)gameEnv.rect.x,
-					samurai.physics.position.y,
-				})
-			}
 			
+			samuraiBrain(&samurai, gameEnv, deltaTime)
+			goblinBrain(&goblin, &samurai, gameEnv, len(goblinFrames[goblin.animate.state]), deltaTime)
+				
 			for &coin in coins {
 				if coin.visible && raylib.CheckCollisionRecs(samurai.rect, coin.rect) {
 					coin.visible = false  
@@ -390,9 +357,13 @@ main :: proc () {
 				updateTexture(&goblin, getCurrentTexture(goblinFrames, goblinAnimate))
 				raylib.DrawTexturePro(goblin.texture, goblin.originRect, goblin.rect, [2]f32{0, 0}, 0.0, raylib.WHITE)
 			}
-
-			updateTexture(&samurai, getCurrentTexture(samuraiFrames, samuraiAnimate))
-			raylib.DrawTexturePro(samurai.texture, samurai.originRect, samurai.rect, [2]f32{0, 0}, 0.0, raylib.WHITE) 
+			
+			if samurai.visible {
+				updateTexture(&samurai, getCurrentTexture(samuraiFrames, samuraiAnimate))
+				raylib.DrawTexturePro(samurai.texture, samurai.originRect, samurai.rect, [2]f32{0, 0}, 0.0, raylib.WHITE) 
+			} else {
+				raylib.DrawText("GAME OVER", cast(i32)gameEnv.rect.width/2 - 300, cast(i32)gameEnv.rect.height/2 - 20, 80, raylib.BLUE)  
+			}
 			
 			raylib.EndDrawing()
 		}
@@ -400,7 +371,54 @@ main :: proc () {
 		raylib.CloseWindow()
 }
 
-goblinBrain :: proc(goblin: ^GameObject, samurai: ^GameObject, gameEnv: ^GameEnvironment, deltaTime: f32) {
+samuraiBrain :: proc(samurai: ^GameObject, gameEnv: ^GameEnvironment, deltaTime: f32) {
+
+			physics.freeFall(samurai.physics, gameEnv.physics, deltaTime)
+			updatePosition(samurai, samurai.physics.position)
+
+			if raylib.IsKeyPressed(raylib.KeyboardKey.UP) && samurai.physics.position.y == gameEnv.physics.groundHeight  {
+				physics.jump(samurai.physics, gameEnv.physics, deltaTime)	  
+				updatePosition(samurai, samurai.physics.position)
+			}
+
+			if raylib.IsKeyPressed(raylib.KeyboardKey.LEFT) {
+				samurai.direction = -1
+			} 
+
+			if raylib.IsKeyPressed(raylib.KeyboardKey.RIGHT) {
+				samurai.direction = 1  
+			}
+
+			if raylib.IsKeyDown(raylib.KeyboardKey.SPACE) {
+				animation.setState(samurai.animate, animation.CHARACTER_STATE.ATTACK)
+				updatePosition(samurai, samurai.physics.position)
+			} else if raylib.IsKeyDown(raylib.KeyboardKey.RIGHT) || raylib.IsKeyDown(raylib.KeyboardKey.LEFT) {
+				animation.setState(samurai.animate, animation.CHARACTER_STATE.RUN)  
+				physics.run(samurai.physics, gameEnv.physics, deltaTime, cast(i32)samurai.direction)
+				updatePosition(samurai, samurai.physics.position)
+			} 
+			else {
+				animation.setState(samurai.animate, animation.CHARACTER_STATE.IDLE)
+				physics.stopRunning(samurai.physics)
+				updatePosition(samurai, samurai.physics.position)
+			}
+
+			if cast(f32)samurai.physics.position.x >= gameEnv.rect.width {
+				updatePosition(samurai, &physics.Vector{
+					cast(i32)gameEnv.rect.width,
+					samurai.physics.position.y,
+				})
+			}
+
+			if samurai.physics.position.x < cast(i32)gameEnv.rect.x {
+				updatePosition(samurai, &physics.Vector{
+					cast(i32)gameEnv.rect.x,
+					samurai.physics.position.y,
+				})
+			}
+}
+
+goblinBrain :: proc(goblin: ^GameObject, samurai: ^GameObject, gameEnv: ^GameEnvironment, size: int, deltaTime: f32) {
 
  if !goblin.visible {
 	  return 
@@ -421,7 +439,9 @@ goblinBrain :: proc(goblin: ^GameObject, samurai: ^GameObject, gameEnv: ^GameEnv
 		 goblin.direction = -1  
 	 }
 
-	 if raylib.CheckCollisionRecs(goblin.rect, samurai.rect) {
+	 direction := vectors.getRelativeDirection(cast(i32)goblin.rect.x, cast(i32)goblin.direction, cast(i32)samurai.rect.x, cast(i32)samurai.direction)
+
+	 if raylib.CheckCollisionRecs(goblin.rect, samurai.rect) && samurai.visible && (direction == vectors.RelativeDirection.FACING_EACH_OTHER || direction == vectors.RelativeDirection.A_BEHIHD_B)  {
 		 if samurai.animate.state == animation.CHARACTER_STATE.ATTACK {
 				animation.setState(goblin.animate, animation.CHARACTER_STATE.HIT) 
 		 } else {
@@ -434,7 +454,7 @@ goblinBrain :: proc(goblin: ^GameObject, samurai: ^GameObject, gameEnv: ^GameEnv
 
  case .ATTACK:
 	 if raylib.CheckCollisionRecs(goblin.rect, samurai.rect) && samurai.health > 0 {
-		 samurai.health -= 10
+		 samurai.health -= 1*samurai.animate.speed
 	 }
 
 	 if !raylib.CheckCollisionRecs(goblin.rect, samurai.rect) {
@@ -448,8 +468,11 @@ goblinBrain :: proc(goblin: ^GameObject, samurai: ^GameObject, gameEnv: ^GameEnv
 		  animation.setState(goblin.animate, animation.CHARACTER_STATE.RUN) 
 			return
 	 }
-
-	 goblin.health -= 2
+	 goblin.health -= 5*goblin.animate.speed
+ case .DEATH:
+	 if animation.getCurrentFrame(goblin.animate) == size - 1{
+		 goblin.visible = false
+	 }
  }
 }
 
